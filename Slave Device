@@ -1,0 +1,149 @@
+#include "main.h"
+
+
+TIM_HandleTypeDef htim2;
+
+UART_HandleTypeDef huart2;
+
+
+
+
+/* Private function prototypes */
+void SystemClock_Config(void);
+static void MX_TIM2_Init(void);
+static void MX_USART2_UART_Init(void);
+
+int main(void)
+{
+  
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  HAL_Init();
+
+
+
+  /* Configure the system clock */
+  SystemClock_Config();
+
+
+  /* Initialize all configured peripherals */
+  MX_TIM2_Init();
+  MX_USART2_UART_Init();
+
+  //set the device in receiving mode
+  USART_SetDEDeassertionTime(USART2,1/UART_OVERSAMPLING_16);
+  USART_DECmd(USART2, DISABLE);
+  HAL_UART_Receive_IT(&huart2, &rcvd_data, 1);
+  while (1);
+}
+
+/**
+  * @brief System Clock Configuration
+  * @retval None
+  */
+void SystemClock_Config(void)
+{
+  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+  RCC_PeriphCLKInitTypeDef PeriphClkInitStruct = {0};
+
+  /** Configure the main internal regulator output voltage 
+  */
+  __HAL_RCC_PWR_CLK_ENABLE();
+  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE2);
+  /** Initializes the CPU, AHB and APB busses clocks 
+  */
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+  RCC_OscInitStruct.PLL.PLLM = 8;
+  RCC_OscInitStruct.PLL.PLLN = 336;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV4;
+  RCC_OscInitStruct.PLL.PLLQ = 7;
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /** Initializes the CPU, AHB and APB busses clocks 
+  */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_I2S;
+  PeriphClkInitStruct.PLLI2S.PLLI2SN = 192;
+  PeriphClkInitStruct.PLLI2S.PLLI2SR = 2;
+  if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct) != HAL_OK)
+  {
+    Error_Handler();
+  }
+}
+
+
+/**
+  * @brief TIM2 Initialization Function
+  */
+static void MX_TIM2_Init(void)
+{
+  htim2.Instance = TIM2;
+  htim2.Init.Prescaler = 4000;
+  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+}
+
+//call back function of timer2
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+   //sending data back to master
+   
+	HAL_TIM_Base_Stop(&htim2);
+	uint16_t len_of_data = strlen(data);
+	USART_DECmd(USART2, ENABLE);
+	USART_SetDEAssertionTime(USART2, 1/UART_OVERSAMPLING_16);
+    HAL_UART_Transmit(&huart2,(uint8_t)*data,len_of_data,HAL_MAX_DELAY);
+    USART_SetDEDeassertionTime(USART2,1/UART_OVERSAMPLING_16);
+    USART_DECmd(USART2, DISABLE);
+    HAL_UART_Receive_IT(&huart2, &rcvd_data, 1);
+}
+
+/**
+  * @brief USART2 Initialization Function
+  */
+static void MX_USART2_UART_Init(void)
+{
+  huart2.Instance = USART2;
+  huart2.Init.BaudRate = 115200;
+  huart2.Init.WordLength = UART_WORDLENGTH_8B;
+  huart2.Init.StopBits = UART_STOPBITS_1;
+  huart2.Init.Parity = UART_PARITY_NONE;
+  huart2.Init.Mode = UART_MODE_TX_RX;
+  huart2.Init.HwFlowCtl = UART_HWCONTROL_RTS_CTS;
+  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+}
+
+//call back function of uart2
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+   //checking the address
+	if(recvd_data == 0x77)
+		HAL_TIM_Base_Start(&htim2);//send data back to master after a specific period
+}
+
